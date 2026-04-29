@@ -88,16 +88,20 @@ export class CodexpertConnectorRunService {
     if (!this.repository) {
       return
     }
-    await this.ensureSchema()
-    const existing = input.executionId
-      ? await this.repository.findOne({ where: { executionId: input.executionId } })
-      : null
-    const entity = this.repository.create({
-      ...(existing ?? {}),
-      ...input,
-      updatedAt: new Date(),
-    })
-    await this.repository.save(entity)
+    try {
+      await this.ensureSchema()
+      const existing = input.executionId
+        ? await this.repository.findOne({ where: { executionId: input.executionId } })
+        : null
+      const entity = this.repository.create({
+        ...(existing ?? {}),
+        ...input,
+        updatedAt: new Date(),
+      })
+      await this.repository.save(entity)
+    } catch (error) {
+      this.logger.warn(`Failed to record Codexpert connector run: ${describeError(error)}`)
+    }
   }
 
   private async ensureColumn(table: Table, name: string, definition: Omit<TableColumnOptions, 'name'>) {

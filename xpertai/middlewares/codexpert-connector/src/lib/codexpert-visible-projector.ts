@@ -267,12 +267,16 @@ function emitSubscriberMessage(config: RunnableConfig | undefined, text: string,
       },
     })
   } catch {
-    subscriber.next({
-      data: {
-        type: ChatMessageTypeEnum.MESSAGE,
-        data: text,
-      },
-    })
+    try {
+      subscriber.next({
+        data: {
+          type: ChatMessageTypeEnum.MESSAGE,
+          data: text,
+        },
+      })
+    } catch {
+      // Projection delivery is best-effort; keep the Codexpert task flow alive.
+    }
   }
 }
 

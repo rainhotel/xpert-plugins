@@ -30,7 +30,9 @@
     "dist",
     "!**/*.tsbuildinfo"
   ],
-  "dependencies": {},
+  "dependencies": {
+    "tslib": "^2.3.0"
+  },
   "peerDependencies": {
     "@langchain/core": "0.3.72",
     "@metad/contracts": "^3.8.0",

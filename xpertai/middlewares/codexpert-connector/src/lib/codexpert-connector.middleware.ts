@@ -24,7 +24,9 @@ import {
   projectVisibleCodexpertEvent,
 } from './codexpert-visible-projector.js'
 import {
+  CODEXPERT_AGENT_KEY,
   CODEXPERT_CONNECTOR_MIDDLEWARE_NAME,
+  CODEXPERT_XPERT_NAME,
   CodexpertConnectorConfigSchema,
   RunCodexpertTaskInputSchema,
   type CodexpertConnectorConfig,
@@ -389,9 +391,10 @@ function buildResult(
   error: string | null,
   sessionSnapshot: Record<string, unknown> | null,
 ): CodexpertTaskResult {
-  const terminalError = error ?? (event?.type === 'error' ? event.message : null)
+  const terminal = resolveTerminalResult(event, error)
+  const repo = buildRepoResult(input, sessionSnapshot)
   return {
-    status: terminalError ? 'failed' : 'success',
+    status: terminal.status,
     codingSessionId: pickString(
       event && 'codingSessionId' in event ? event.codingSessionId : null,
       sessionId,
@@ -401,19 +404,73 @@ function buildResult(
     taskId: pickString(event && 'taskId' in event ? event.taskId : null, input.taskId),
     threadId: pickString(event && 'threadId' in event ? event.threadId : null, input.threadId),
     executionId: pickString(event && 'executionId' in event ? event.executionId : null),
-    repo: {
-      id: pickString(input.repoId, sessionSnapshot?.repoId),
-      name: pickString(sessionSnapshot?.repoName),
-      owner: pickString(sessionSnapshot?.repoOwner),
-      slug: pickString(sessionSnapshot?.repoSlug),
-    },
+    repo,
     branch: pickString(input.branchName, sessionSnapshot?.branchName),
     environmentId: pickString(event && 'environmentId' in event ? event.environmentId : null, sessionSnapshot?.environmentId),
     environmentReused: null,
     summary: event?.type === 'done' ? pickString(event.summary, event.output) : null,
-    error: terminalError,
+    error: terminal.error,
     ...(event?.type === 'done' && event.prUrl ? { prUrl: event.prUrl } : {}),
   }
+}
+
+function resolveTerminalResult(
+  event: CodexpertConnectorEvent | null,
+  error: string | null,
+): Pick<CodexpertTaskResult, 'status' | 'error'> {
+  if (error) {
+    return { status: isTimeoutError(error) ? 'timeout' : 'failed', error }
+  }
+  if (!event) {
+    return { status: 'failed', error: 'Codexpert stream ended without a terminal event.' }
+  }
+  if (event.type === 'error') {
+    return { status: 'failed', error: event.message }
+  }
+  if (event.type !== 'done') {
+    return { status: 'failed', error: 'Codexpert stream ended without a terminal done event.' }
+  }
+
+  const status = normalizeTerminalStatus(event.status)
+  if (status === 'success') {
+    return { status, error: null }
+  }
+  return {
+    status,
+    error: event.status ? `Codexpert finished with status: ${event.status}` : 'Codexpert finished unsuccessfully.',
+  }
+}
+
+function normalizeTerminalStatus(status: unknown): CodexpertTaskResult['status'] {
+  const value = typeof status === 'string' ? status.trim().toLowerCase() : ''
+  if (!value || ['success', 'succeeded', 'completed', 'complete', 'done', 'ok'].includes(value)) {
+    return 'success'
+  }
+  if (['timeout', 'timed_out', 'timed-out'].includes(value)) {
+    return 'timeout'
+  }
+  if (['canceled', 'cancelled', 'interrupted', 'aborted'].includes(value)) {
+    return 'canceled'
+  }
+  return 'failed'
+}
+
+function isTimeoutError(message: string): boolean {
+  const lower = message.toLowerCase()
+  return lower.includes('timeout') || lower.includes('timed out') || lower.includes('abort')
+}
+
+function buildRepoResult(
+  input: RunCodexpertTaskInput,
+  sessionSnapshot: Record<string, unknown> | null,
+): CodexpertTaskResult['repo'] {
+  const repo = {
+    id: pickString(input.repoId, sessionSnapshot?.repoId),
+    name: pickString(sessionSnapshot?.repoName),
+    owner: pickString(sessionSnapshot?.repoOwner),
+    slug: pickString(sessionSnapshot?.repoSlug),
+  }
+  return repo.id || repo.name || repo.owner || repo.slug ? repo : null
 }
 
 function normalizeRecord(value: unknown): Record<string, unknown> {
@@ -441,8 +498,8 @@ function projectImmediateError(message: string, config?: RunnableConfig) {
         data: {
           type: 'text',
           text: `Codexpert failed: ${message}`,
-          xpertName: 'Codexpert',
-          agentKey: 'codexpert',
+          xpertName: CODEXPERT_XPERT_NAME,
+          agentKey: CODEXPERT_AGENT_KEY,
         } satisfies TMessageContentText,
       },
     })
