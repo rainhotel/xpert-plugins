@@ -123,6 +123,8 @@ The plugin passes through these Codexpert MCP tools:
 
 Pull request and issue-comment publishing tools are intentionally not exposed through this external connector. Codexpert/code agent owns repository writeback and PR delivery inside the coding task. If Codexpert creates a PR, the connector returns its URL as result metadata.
 
+External Xpert agents should use this connector middleware instead of attaching the Codexpert MCP server as a standalone MCP toolset. A direct MCP toolset bypasses the connector filter and is reserved for Codexpert-side coding agents that own delivery actions.
+
 The plugin also provides:
 
 ```text

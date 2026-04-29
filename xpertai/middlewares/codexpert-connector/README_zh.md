@@ -123,6 +123,8 @@ x-principal-user-id: <userId>
 
 PR 发布和 issue 评论工具不会通过这个外部连接器暴露。仓库写回和 PR 交付由 Codexpert/code agent 在编码任务内部负责。如果 Codexpert 创建了 PR，连接器只会把 PR URL 作为结果元信息返回。
 
+外部 Xpert 应使用这个 connector middleware，不要再把 Codexpert MCP server 作为独立 MCP toolset 直接挂到智能体上。直连 MCP 会绕过 connector 的工具过滤，只适合 Codexpert 侧负责交付动作的编码智能体使用。
+
 插件额外提供：
 
 ```text
