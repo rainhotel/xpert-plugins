@@ -120,9 +120,8 @@ x-principal-user-id: <userId>
 - `selectCodingContext`
 - `resolveCodexpertConversationContext`
 - `resumeCodexpertSession`
-- `createPR`
-- `publishTaskPR`
-- `createIssueComment`
+
+PR 发布和 issue 评论工具不会通过这个外部连接器暴露。仓库写回和 PR 交付由 Codexpert/code agent 在编码任务内部负责。如果 Codexpert 创建了 PR，连接器只会把 PR URL 作为结果元信息返回。
 
 插件额外提供：
 

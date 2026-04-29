@@ -120,9 +120,8 @@ The plugin passes through these Codexpert MCP tools:
 - `selectCodingContext`
 - `resolveCodexpertConversationContext`
 - `resumeCodexpertSession`
-- `createPR`
-- `publishTaskPR`
-- `createIssueComment`
+
+Pull request and issue-comment publishing tools are intentionally not exposed through this external connector. Codexpert/code agent owns repository writeback and PR delivery inside the coding task. If Codexpert creates a PR, the connector returns its URL as result metadata.
 
 The plugin also provides:
 

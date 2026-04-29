@@ -45,9 +45,6 @@ const MCP_TOOL_NAMES = [
   'selectCodingContext',
   'resolveCodexpertConversationContext',
   'resumeCodexpertSession',
-  'createPR',
-  'publishTaskPR',
-  'createIssueComment',
 ] as const
 
 const passthroughToolSchema = z.record(z.string(), z.unknown()).optional().default({})
@@ -60,7 +57,7 @@ const RUN_CODEXPERT_TASK_DESCRIPTION = [
   'Use this only when the user wants Codexpert to actually perform or continue coding work, such as inspecting, modifying, implementing, debugging, or continuing a repository task.',
   'Before calling this tool, make sure the coding context is known. If codingSessionId or resumed task context is missing, first use listCodingAssistants, listGitConnections, listGitRepositories, listGitBranches, selectCodingContext, listCodexpertConversations, or resumeCodexpertSession as needed.',
   'During execution, Codexpert visible progress and output are streamed directly to the user. The agent should not restate or rewrite that live output unless the user asks.',
-  'After the tool returns, use the metadata it returns, including status, codingSessionId, taskId, threadId, executionId, environmentId, summary, error, and prUrl, to decide whether to continue, recover, publish a PR, or report failure.',
+  'After the tool returns, use the metadata it returns, including status, codingSessionId, taskId, threadId, executionId, environmentId, summary, error, and prUrl, to decide whether to continue, recover, report a Codexpert-produced PR, or report failure.',
   'Do not call this tool for general discussion, planning, explanation, configuration questions, or status-only lookup.',
 ].join('\n')
 
