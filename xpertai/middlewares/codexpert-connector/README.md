@@ -251,28 +251,128 @@ The table maps Xpert executions to Codexpert sessions, tasks, threads, and execu
 
 ## Local Development
 
-Compile the plugin:
+Local testing needs three running pieces:
+
+- Codexpert API, which owns coding sessions and task execution.
+- Xpert API, which loads this middleware and provides the current business principal.
+- The local `@xpert-ai/plugin-codexpert-connector` workspace.
+
+### Codexpert Environment
+
+Configure the Codexpert API environment first. The exact ports are up to your local setup, but the plugin URLs must point to the same Codexpert API instance.
+
+For example, if Codexpert runs on `3001` and Xpert API runs on `3000`, then `codexpertMcpUrl` is `http://localhost:3001/v1/mcp`, `codexpertConnectorBaseUrl` is `http://localhost:3001/api`, and `XPERTAI_API_URL` is `http://localhost:3000/api`.
+
+```env
+# Codexpert API listen port.
+PORT=<codexpert-api-port>
+
+# Xpert API used by Codexpert when it creates tasks, environments, and related Xpert-side resources.
+XPERTAI_API_URL=http://localhost:<xpert-api-port>/api
+
+# Optional. Set this too when running the Codexpert web UI locally.
+VITE_XPERTAI_API_URL=http://localhost:<xpert-api-port>/api
+
+# Workspace API key used by Codexpert when calling Xpert APIs.
+XPERTAI_WORKSPACE_API_KEY=<xpert-workspace-api-key>
+
+# Token accepted by the Codexpert MCP endpoint.
+MCP_SERVER_TOKEN=<codexpert-service-token>
+
+# Optional additional MCP tokens. Use this when the connector should use a token
+# different from MCP_SERVER_TOKEN.
+MCP_SERVER_TOKENS=<optional-comma-separated-service-tokens>
+
+# Token accepted by /api/codexpert-connector/*.
+# If this is omitted, the connector endpoint also accepts MCP_SERVER_TOKEN,
+# CODEXPERT_ACP_SERVICE_TOKEN, ACP_SERVICE_TOKEN, and MCP_SERVER_TOKENS.
+CODEXPERT_CONNECTOR_SERVICE_TOKEN=<codexpert-service-token>
+
+# Optional local user-id mapping when Xpert and Codexpert development data use
+# different user ids for the same tester.
+CODEXPERT_DEV_PRINCIPAL_USER_MAP={"<xpert-user-id>":"<codexpert-effective-user-id>"}
+```
+
+The middleware `serviceToken` must be accepted by both Codexpert request paths it calls:
+
+- `POST /v1/mcp`
+- `POST /api/codexpert-connector/sessions`
+- `POST /api/codexpert-connector/sessions/:sessionId/prompts/stream`
+
+For the simplest local setup, use the same value for `MCP_SERVER_TOKEN`, `CODEXPERT_CONNECTOR_SERVICE_TOKEN`, and the middleware `serviceToken`.
+
+### Xpert Host Environment
+
+The Xpert API must be able to install and load the local plugin workspace. Add the plugin workspace to `PLUGIN_WORKSPACE_ROOTS` in the Xpert API environment:
+
+```env
+PLUGIN_WORKSPACE_ROOTS=<absolute-path-to-xpert-plugins-repo>/xpertai/middlewares/codexpert-connector
+```
+
+`PLUGIN_WORKSPACE_ROOTS` may contain multiple roots separated by `;` or `,`. The local install `workspacePath` must be an absolute path on the Xpert API host and must be inside one of these allowed roots.
+
+### Build The Plugin
+
+From the `xpertai` workspace in the `xpert-plugins` repository:
 
 ```bash
-cd /Users/lilinhao/project/code-xpert/codexpertplugin/xpertplugins
-./xpertai/node_modules/.bin/tsc -p xpertai/middlewares/codexpert-connector/tsconfig.lib.json
+cd <xpert-plugins-repo>
+pnpm -C xpertai install
+pnpm -C xpertai exec tsc -p middlewares/codexpert-connector/tsconfig.lib.json
 ```
 
-Common local URLs:
+### Install The Local Plugin Into Xpert
+
+Install or refresh the local plugin in the Xpert API host:
+
+```bash
+cd <xpert-host-repo>
+
+pnpm plugin:reinstall:local \
+  @xpert-ai/plugin-codexpert-connector \
+  <absolute-path-to-xpert-plugins-repo>/xpertai/middlewares/codexpert-connector \
+  --api-url http://localhost:<xpert-api-port> \
+  --org-id <xpert-organization-id> \
+  --token <xpert-admin-jwt> \
+  --build-cwd <absolute-path-to-xpert-plugins-repo>/xpertai \
+  --build-command "./node_modules/.bin/tsc -p middlewares/codexpert-connector/tsconfig.lib.json"
+```
+
+You can also install it from the Xpert plugin settings UI by using:
 
 ```text
-Codexpert MCP:       http://localhost:3001/v1/mcp
-Codexpert API base:  http://localhost:3001/api
-Xpert backend:       http://localhost:3100
+Plugin package name: @xpert-ai/plugin-codexpert-connector
+Workspace path:      <absolute-path-to-xpert-plugins-repo>/xpertai/middlewares/codexpert-connector
 ```
 
-Codexpert backend must provide:
+### Configure The Agent Middleware
 
-```text
-POST /v1/mcp
-POST /api/codexpert-connector/sessions
-POST /api/codexpert-connector/sessions/:sessionId/prompts/stream
+Add the `CodexpertConnector` middleware to the target Xpert agent and configure it with the Codexpert URLs and service token:
+
+```json
+{
+  "codexpertMcpUrl": "http://localhost:3001/v1/mcp",
+  "codexpertConnectorBaseUrl": "http://localhost:3001/api",
+  "serviceToken": "<codexpert-service-token>",
+  "timeoutMs": 600000,
+  "enableVisibleProjection": true,
+  "enableStatusEvents": true,
+  "defaultXpertId": "<optional-codexpert-assistant-id>",
+  "defaultRepoId": "<optional-codexpert-repo-id>",
+  "defaultConnectionId": "<optional-codexpert-git-connection-id>",
+  "defaultBranchName": "main"
+}
 ```
+
+If the default Codexpert context fields are omitted, the agent must first use the context tools to select or resume a coding context before calling `runCodexpertTask`.
+
+### Smoke Test Checklist
+
+- Xpert API is running and has loaded `@xpert-ai/plugin-codexpert-connector`.
+- Codexpert API is running and accepts `Authorization: Bearer <codexpert-service-token>`.
+- The middleware config points to the Codexpert API port, not the Xpert API port.
+- The current Xpert request has `tenantId`, `organizationId`, and `userId`.
+- `XPERTAI_WORKSPACE_API_KEY` lets Codexpert call the configured Xpert API.
 
 ## Boundaries
 

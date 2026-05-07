@@ -251,28 +251,128 @@ plugin_codexpert_connector_run
 
 ## 本地开发
 
-编译插件：
+本地测试需要三部分同时可用：
+
+- Codexpert API：负责 coding session 和任务执行。
+- Xpert API：负责加载这个 middleware，并提供当前业务用户身份。
+- 本地 `@xpert-ai/plugin-codexpert-connector` 插件工作区。
+
+### Codexpert 环境变量
+
+先配置 Codexpert API 环境。端口可以按你的本地环境调整，但插件里的 URL 必须指向同一个 Codexpert API 实例。
+
+例如 Codexpert 运行在 `3001`、Xpert API 运行在 `3000` 时，`codexpertMcpUrl` 是 `http://localhost:3001/v1/mcp`，`codexpertConnectorBaseUrl` 是 `http://localhost:3001/api`，`XPERTAI_API_URL` 是 `http://localhost:3000/api`。
+
+```env
+# Codexpert API 监听端口。
+PORT=<codexpert-api-port>
+
+# Codexpert 创建任务、环境以及相关 Xpert 侧资源时访问的 Xpert API。
+XPERTAI_API_URL=http://localhost:<xpert-api-port>/api
+
+# 可选。如果本地也运行 Codexpert Web UI，也把这个字段配成同一个 Xpert API。
+VITE_XPERTAI_API_URL=http://localhost:<xpert-api-port>/api
+
+# Codexpert 调用 Xpert API 时使用的 workspace API key。
+XPERTAI_WORKSPACE_API_KEY=<xpert-workspace-api-key>
+
+# Codexpert MCP endpoint 接受的 token。
+MCP_SERVER_TOKEN=<codexpert-service-token>
+
+# 可选的额外 MCP tokens。如果 connector 使用的 token 和 MCP_SERVER_TOKEN 不同，
+# 可以把 connector token 放到这里。
+MCP_SERVER_TOKENS=<optional-comma-separated-service-tokens>
+
+# /api/codexpert-connector/* 接受的 token。
+# 如果不配置这个字段，connector endpoint 也会接受 MCP_SERVER_TOKEN、
+# CODEXPERT_ACP_SERVICE_TOKEN、ACP_SERVICE_TOKEN 和 MCP_SERVER_TOKENS。
+CODEXPERT_CONNECTOR_SERVICE_TOKEN=<codexpert-service-token>
+
+# 可选。本地 Xpert 和 Codexpert 开发数据里的同一个测试用户 id 不一致时，
+# 可以用这个映射到 Codexpert 侧真正有效的用户 id。
+CODEXPERT_DEV_PRINCIPAL_USER_MAP={"<xpert-user-id>":"<codexpert-effective-user-id>"}
+```
+
+middleware 的 `serviceToken` 必须能同时通过 Codexpert 的两类请求路径：
+
+- `POST /v1/mcp`
+- `POST /api/codexpert-connector/sessions`
+- `POST /api/codexpert-connector/sessions/:sessionId/prompts/stream`
+
+最简单的本地配置是让 `MCP_SERVER_TOKEN`、`CODEXPERT_CONNECTOR_SERVICE_TOKEN` 和 middleware 里的 `serviceToken` 使用同一个值。
+
+### Xpert 宿主环境变量
+
+Xpert API 必须能安装并加载本地插件工作区。在 Xpert API 环境里加入：
+
+```env
+PLUGIN_WORKSPACE_ROOTS=<absolute-path-to-xpert-plugins-repo>/xpertai/middlewares/codexpert-connector
+```
+
+`PLUGIN_WORKSPACE_ROOTS` 可以用 `;` 或 `,` 分隔多个 root。本地安装时传入的 `workspacePath` 必须是 Xpert API 宿主机可见的绝对路径，并且必须位于这些允许的 root 之内。
+
+### 编译插件
+
+在 `xpert-plugins` 仓库的 `xpertai` 工作区里执行：
 
 ```bash
-cd <repo-root>
+cd <xpert-plugins-repo>
+pnpm -C xpertai install
 pnpm -C xpertai exec tsc -p middlewares/codexpert-connector/tsconfig.lib.json
 ```
 
-本地常见地址：
+### 安装本地插件到 Xpert
 
-```text
-Codexpert MCP:       http://localhost:3001/v1/mcp
-Codexpert API base:  http://localhost:3001/api
-Xpert backend:       http://localhost:3100
+在 Xpert API 宿主里安装或刷新本地插件：
+
+```bash
+cd <xpert-host-repo>
+
+pnpm plugin:reinstall:local \
+  @xpert-ai/plugin-codexpert-connector \
+  <absolute-path-to-xpert-plugins-repo>/xpertai/middlewares/codexpert-connector \
+  --api-url http://localhost:<xpert-api-port> \
+  --org-id <xpert-organization-id> \
+  --token <xpert-admin-jwt> \
+  --build-cwd <absolute-path-to-xpert-plugins-repo>/xpertai \
+  --build-command "./node_modules/.bin/tsc -p middlewares/codexpert-connector/tsconfig.lib.json"
 ```
 
-Codexpert 后端需要提供：
+也可以在 Xpert 的插件设置页面安装本地插件，填写：
 
 ```text
-POST /v1/mcp
-POST /api/codexpert-connector/sessions
-POST /api/codexpert-connector/sessions/:sessionId/prompts/stream
+Plugin package name: @xpert-ai/plugin-codexpert-connector
+Workspace path:      <absolute-path-to-xpert-plugins-repo>/xpertai/middlewares/codexpert-connector
 ```
+
+### 配置 Agent Middleware
+
+给目标 Xpert Agent 添加 `CodexpertConnector` middleware，并填写 Codexpert URL 和 service token：
+
+```json
+{
+  "codexpertMcpUrl": "http://localhost:3001/v1/mcp",
+  "codexpertConnectorBaseUrl": "http://localhost:3001/api",
+  "serviceToken": "<codexpert-service-token>",
+  "timeoutMs": 600000,
+  "enableVisibleProjection": true,
+  "enableStatusEvents": true,
+  "defaultXpertId": "<optional-codexpert-assistant-id>",
+  "defaultRepoId": "<optional-codexpert-repo-id>",
+  "defaultConnectionId": "<optional-codexpert-git-connection-id>",
+  "defaultBranchName": "main"
+}
+```
+
+如果不配置默认 Codexpert 上下文字段，Agent 必须先使用上下文工具选择或恢复 coding context，然后才能调用 `runCodexpertTask`。
+
+### 冒烟检查
+
+- Xpert API 正在运行，并且已经加载 `@xpert-ai/plugin-codexpert-connector`。
+- Codexpert API 正在运行，并接受 `Authorization: Bearer <codexpert-service-token>`。
+- middleware 配置指向 Codexpert API 端口，不是 Xpert API 端口。
+- 当前 Xpert 请求能解析出 `tenantId`、`organizationId` 和 `userId`。
+- `XPERTAI_WORKSPACE_API_KEY` 能让 Codexpert 调用配置的 Xpert API。
 
 ## 边界
 
