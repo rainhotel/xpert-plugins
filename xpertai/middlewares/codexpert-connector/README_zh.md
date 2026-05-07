@@ -254,8 +254,8 @@ plugin_codexpert_connector_run
 编译插件：
 
 ```bash
-cd /Users/lilinhao/project/code-xpert/codexpertplugin/xpertplugins
-./xpertai/node_modules/.bin/tsc -p xpertai/middlewares/codexpert-connector/tsconfig.lib.json
+cd <repo-root>
+pnpm -C xpertai exec tsc -p middlewares/codexpert-connector/tsconfig.lib.json
 ```
 
 本地常见地址：
